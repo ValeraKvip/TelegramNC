@@ -15,6 +15,7 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
@@ -64,6 +65,10 @@ public class MessagesStorage extends BaseController {
 
     public interface BooleanCallback {
         void run(boolean param);
+    }
+
+    public interface ArrayListCallback {
+        void run(ArrayList<Integer> param);
     }
 
     private DispatchQueue storageQueue = new DispatchQueue("storageQueue");
@@ -7356,6 +7361,45 @@ public class MessagesStorage extends BaseController {
         return () -> getMessagesController().processLoadedMessages(res, finalMessagesCount, dialogId, mergeDialogId, countQueryFinal, maxIdOverrideFinal, offset_date, true, classGuid, minUnreadIdFinal, lastMessageIdFinal, countUnreadFinal, maxUnreadDateFinal, load_type, isEndFinal, scheduled ? 1 : 0, replyMessageId, loadIndex, queryFromServerFinal, mentionsUnreadFinal, processMessages);
         //}
     }
+
+    public void getMessagesInRange(long dialogId,  int minDate, int maxDate, ArrayListCallback callback) {
+        if(callback == null){
+            return;
+        }
+
+        try {
+            ArrayList<Integer> result = new ArrayList();
+            ArrayList<TLRPC.Message> msg = new ArrayList();
+            SQLiteCursor cursor = database.queryFinalized(String.format(Locale.US, "SELECT mid, date FROM messages_v2  WHERE (uid = %d) AND (date >= %d AND  date <= %d)", dialogId, minDate, maxDate));
+            while (cursor.next()) {
+                try {
+                    int mid = cursor.intValue(0);
+                    result.add(mid);
+                    int date = cursor.intValue(1);
+
+                    NativeByteBuffer data = cursor.byteBufferValue(2);
+                    if (data != null) {
+                        TLRPC.Message m = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+
+                        data.reuse();
+                        if (m != null) {
+                            msg.add(m);
+                        }
+                    }
+                } catch (Exception e) {
+                    FileLog.e(e);
+                }
+            }
+
+
+                callback.run(result);
+
+            cursor.dispose();
+        }catch (Exception e){
+            callback.run(null);
+        }
+    }
+
 
     public void getMessages(long dialogId, long mergeDialogId, boolean loadInfo, int count, int max_id, int offset_date, int minDate, int classGuid, int load_type, boolean scheduled, int replyMessageId, int loadIndex, boolean processMessages) {
         storageQueue.postRunnable(() -> {

@@ -4809,4 +4809,25 @@
     <string name="UserAcceptedToGroupAction">un1 was accepted into the group</string>
     <string name="UserAcceptedToGroupPush">%1$s was accepted into the group</string>
     <string name="UserAcceptedToGroupPushWithGroup">%2$s|%1$s was accepted into the group</string>
+    <string name="SavingContent">Saving content</string>
+    <string name="RestrictSavingContentHelp">Participants won\'t be able to forward messages from this channel or save media files.</string>
+    <string name="RestrictSavingContent">Restrict saving content</string>
+    <string name="ActionTTLToggleNoForwardsEnebled">Restrict saving content enabled by %1$s</string>
+    <string name="ActionTTLToggleNoForwardsDisabled">Restrict saving content disabled by %1$s</string>
+    <string name="ForwardRestrictedGroup">Forwards from this group are restricted.</string>
+    <string name="ForwardRestrictedChannel">Forwards from this channel are restricted.</string>
+    <string name="ChatForwardRestricted">Error. Chat forward restricted</string>
+    <string name="SendMessageAs">Send message as...</string>
+    <string name="PersonalAccount">personal account</string>
+    <string name="SubscribersCount">%1$s subscribers</string>
+    <string name="SelectThisDay">Select this day</string>
+    <string name="SelectDays">Select days</string>
+    <string name="CalendarTapToSelect">Tap a day to select</string>
+    <string name="DeleteDaysRange_zero">Are you sure you want to delete all messages for the %1$d selected day?</string>
+    <string name="DeleteDaysRange_one">Are you sure you want to delete all messages for the %1$d selected day?</string>
+    <string name="DeleteDaysRange_two">Are you sure you want to delete all messages for the %1$d selected days?</string>
+    <string name="DeleteDaysRange_few">Are you sure you want to delete all messages for the %1$d selected days?</string>
+    <string name="DeleteDaysRange_many">Are you sure you want to delete all messages for the %1$d selected days?</string>
+    <string name="DeleteDaysRange_other">Are you sure you want to delete all messages for the %1$d selected days?</string>
+    <string name="ChannelSelectorHint">Tap to select \'send as\' channel</string>
 </resources>

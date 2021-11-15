@@ -65,7 +65,14 @@ public class GroupCreateSpan extends View {
 
     public GroupCreateSpan(Context context, Object object, ContactsController.Contact contact) {
         super(context);
+        reset(object, contact);
+    }
 
+    public void reset(Object object) {
+        reset(object, null);
+    }
+
+    public void reset(Object object, ContactsController.Contact contact) {
         currentContact = contact;
         deleteDrawable = getResources().getDrawable(R.drawable.delete);
         textPaint.setTextSize(AndroidUtilities.dp(14));
@@ -188,6 +195,11 @@ public class GroupCreateSpan extends View {
         updateColors();
     }
 
+    public void clearBadge() {
+        nameLayout = null;
+        textWidth = 0;
+    }
+
     public void updateColors() {
         int color = avatarDrawable.getColor();
         int back = Theme.getColor(Theme.key_groupcreate_spanBackground);
@@ -240,7 +252,8 @@ public class GroupCreateSpan extends View {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        setMeasuredDimension(AndroidUtilities.dp(32 + 25) + textWidth, AndroidUtilities.dp(32));
+        int offset = nameLayout != null ? 25 : 0;
+        setMeasuredDimension(AndroidUtilities.dp(32 + offset) + textWidth, AndroidUtilities.dp(32));
     }
 
     @Override
@@ -265,9 +278,11 @@ public class GroupCreateSpan extends View {
             invalidate();
         }
         canvas.save();
-        rect.set(0, 0, getMeasuredWidth(), AndroidUtilities.dp(32));
-        backPaint.setColor(Color.argb(colors[6] + (int) ((colors[7] - colors[6]) * progress), colors[0] + (int) ((colors[1] - colors[0]) * progress), colors[2] + (int) ((colors[3] - colors[2]) * progress), colors[4] + (int) ((colors[5] - colors[4]) * progress)));
-        canvas.drawRoundRect(rect, AndroidUtilities.dp(16), AndroidUtilities.dp(16), backPaint);
+        if (nameLayout != null) {
+            rect.set(0, 0, getMeasuredWidth(), AndroidUtilities.dp(32));
+            backPaint.setColor(Color.argb(colors[6] + (int) ((colors[7] - colors[6]) * progress), colors[0] + (int) ((colors[1] - colors[0]) * progress), colors[2] + (int) ((colors[3] - colors[2]) * progress), colors[4] + (int) ((colors[5] - colors[4]) * progress)));
+            canvas.drawRoundRect(rect, AndroidUtilities.dp(16), AndroidUtilities.dp(16), backPaint);
+        }
         imageReceiver.draw(canvas);
         if (progress != 0) {
             int color = avatarDrawable.getColor();
@@ -282,19 +297,21 @@ public class GroupCreateSpan extends View {
             deleteDrawable.draw(canvas);
             canvas.restore();
         }
-        canvas.translate(textX + AndroidUtilities.dp(32 + 9), AndroidUtilities.dp(8));
-        int text = Theme.getColor(Theme.key_groupcreate_spanText);
-        int textSelected = Theme.getColor(Theme.key_avatar_text);
-        textPaint.setColor(ColorUtils.blendARGB(text, textSelected, progress));
+        if (nameLayout != null) {
+            canvas.translate(textX + AndroidUtilities.dp(32 + 9), AndroidUtilities.dp(8));
+            int text = Theme.getColor(Theme.key_groupcreate_spanText);
+            int textSelected = Theme.getColor(Theme.key_avatar_text);
+            textPaint.setColor(ColorUtils.blendARGB(text, textSelected, progress));
 
-        nameLayout.draw(canvas);
+            nameLayout.draw(canvas);
+        }
         canvas.restore();
     }
 
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
-        info.setText(nameLayout.getText());
+        info.setText(nameLayout != null ? nameLayout.getText() : "");
         if (isDeleting() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
             info.addAction(new AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK.getId(), LocaleController.getString("Delete", R.string.Delete)));
     }

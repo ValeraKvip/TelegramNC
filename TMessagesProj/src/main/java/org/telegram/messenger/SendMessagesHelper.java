@@ -8,6 +8,8 @@
 
 package org.telegram.messenger;
 
+import static org.telegram.tgnet.TLRPC.CHAT_FLAG_HAS_PUBLIC_CHANNELS;
+
 import android.content.ClipDescription;
 import android.content.Context;
 import android.content.Intent;
@@ -166,7 +168,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 uploadSet.remove(path);
             }
         }
-        
+
         private void addUploadProgress(String path, long sz, float progress) {
             uploadProgresses.put(path, progress);
             uploadSize.put(path, sz);
@@ -647,7 +649,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
         public boolean performMediaUpload;
 
         public boolean retriedToSend;
-        
+
         public int topMessageId;
 
         public TLRPC.InputMedia inputUploadMedia;
@@ -2970,7 +2972,7 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 req.msg_id = messageObject.getId();
                 req.game = button instanceof TLRPC.TL_keyboardButtonGame;
                 if (button.requires_password) {
-                    req.password = req.password = srp != null ? srp : new TLRPC.TL_inputCheckPasswordEmpty();;
+                    req.password = req.password = srp != null ? srp : new TLRPC.TL_inputCheckPasswordEmpty();
                     req.flags |= 4;
                 }
                 if (button.data != null) {
@@ -3433,9 +3435,16 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                         newMsg.flags |= 65536;
                     }
                 } else {
-                    newMsg.from_id = new TLRPC.TL_peerUser();
-                    newMsg.from_id.user_id = myId;
-                    newMsg.flags |= TLRPC.MESSAGE_FLAG_HAS_FROM_ID;
+                    TLRPC.Chat _chat = getMessagesController().getChat(-peer);
+                    TLRPC.ChatFull chatFull = _chat != null ? getMessagesController().getChatFull(_chat.id) : null;
+                    if (chatFull != null && chatFull.default_send_as != null && (chatFull.flags & CHAT_FLAG_HAS_PUBLIC_CHANNELS) != 0) {
+                        newMsg.from_id = chatFull.default_send_as;
+                        newMsg.flags |= 16384;
+                    } else {
+                        newMsg.from_id = new TLRPC.TL_peerUser();
+                        newMsg.from_id.user_id = myId;
+                        newMsg.flags |= TLRPC.MESSAGE_FLAG_HAS_FROM_ID;
+                    }
                 }
                 getUserConfig().saveConfig(false);
             }
@@ -3562,9 +3571,17 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                 newMsg.media_unread = true;
             }
 
+            TLRPC.Chat _chat = getMessagesController().getChat(-peer);
+            TLRPC.ChatFull chatFull = _chat != null ? getMessagesController().getChatFull(_chat.id) : null;
+            if (chatFull != null && chatFull.default_send_as != null && (chatFull.flags & CHAT_FLAG_HAS_PUBLIC_CHANNELS) != 0) {
+                newMsg.from_id = chatFull.default_send_as;
+                newMsg.flags |= 16384;
+            }
+
             if (newMsg.from_id == null) {
                 newMsg.from_id = newMsg.peer_id;
             }
+
             newMsg.send_state = MessageObject.MESSAGE_SEND_STATE_SENDING;
 
             long groupId = 0;
@@ -3629,6 +3646,10 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
 
             boolean performMediaUpload = false;
 
+//            TLRPC.Chat _chat = getMessagesController().getChat(-peer);
+//            TLRPC.ChatFull chatFull = _chat != null ? getMessagesController().getChatFull(_chat.id) : null;
+
+
             if (type == 0 || type == 9 && message != null && encryptedChat != null) {
                 if (encryptedChat == null) {
                     TLRPC.TL_messages_sendMessage reqSend = new TLRPC.TL_messages_sendMessage();
@@ -3637,6 +3658,11 @@ public class SendMessagesHelper extends BaseController implements NotificationCe
                     reqSend.silent = newMsg.silent;
                     reqSend.peer = sendToPeer;
                     reqSend.random_id = newMsg.random_id;
+                    if (chatFull != null && chatFull.default_send_as != null && (chatFull.flags & CHAT_FLAG_HAS_PUBLIC_CHANNELS) != 0) {
+                        reqSend.send_as = getMessagesController().getInputPeer(MessageObject.getPeerId(chatFull.default_send_as));
+                        reqSend.flags |= 16384;
+                    }
+
                     if (newMsg.reply_to != null && newMsg.reply_to.reply_to_msg_id != 0) {
                         reqSend.flags |= 1;
                         reqSend.reply_to_msg_id = newMsg.reply_to.reply_to_msg_id;

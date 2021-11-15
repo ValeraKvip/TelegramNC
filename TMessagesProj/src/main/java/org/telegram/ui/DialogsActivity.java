@@ -3226,6 +3226,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
 
                 @Override
+                public void onChannelSelectorVisible(View v) {
+
+                }
+
+                @Override
                 public void onSwitchRecordMode(boolean video) {
 
                 }

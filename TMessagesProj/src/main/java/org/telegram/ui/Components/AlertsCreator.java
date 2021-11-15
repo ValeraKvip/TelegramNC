@@ -234,6 +234,9 @@ public class AlertsCreator {
                 case "SCHEDULE_TOO_MUCH":
                     showSimpleToast(fragment, LocaleController.getString("MessageScheduledLimitReached", R.string.MessageScheduledLimitReached));
                     break;
+                case "CHAT_FORWARDS_RESTRICTED":
+                    NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.needShowAlert, 7);
+                    break;
             }
         } else if (request instanceof TLRPC.TL_messages_importChatInvite) {
             if (error.text.startsWith("FLOOD_WAIT")) {
@@ -3969,6 +3972,69 @@ public class AlertsCreator {
 
     public interface PaymentAlertDelegate {
         void didPressedNewCard();
+    }
+
+    public static void createDeleteMessagesRangeAlert(BaseFragment fragment, TLRPC.User user,
+                                                       int count,  MessagesStorage.BooleanCallback onDelete,
+                                                      Runnable onCancel, Theme.ResourcesProvider resourcesProvider ){
+
+        if (fragment == null ||  user == null) {
+            return;
+        }
+
+        Activity activity = fragment.getParentActivity();
+        if (activity == null) {
+            return;
+        }
+
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity, resourcesProvider);
+        FrameLayout frameLayout = new FrameLayout(activity);
+        CheckBoxCell cell = new CheckBoxCell(activity, 1, resourcesProvider);
+        cell.setBackground(Theme.getSelectorDrawable(false));
+
+        if (!UserObject.isUserSelf(user)) {
+            cell.setText(LocaleController.formatString("DeleteMessagesOptionAlso", R.string.DeleteMessagesOptionAlso,
+                    UserObject.getFirstName(user)), "", false, false);
+
+
+            cell.setPadding(LocaleController.isRTL ? AndroidUtilities.dp(16) : AndroidUtilities.dp(8),
+                    0, LocaleController.isRTL ? AndroidUtilities.dp(8) : AndroidUtilities.dp(16), 0);
+
+            frameLayout.addView(cell, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48,
+                    Gravity.TOP | Gravity.LEFT, 0, 0, 0, 0));
+        }
+
+        boolean[] allowRevoke = {false};
+        cell.setOnClickListener(v -> {
+            CheckBoxCell cell1 = (CheckBoxCell) v;
+            allowRevoke[0] = !allowRevoke[0];
+            cell1.setChecked(allowRevoke[0], true);
+        });
+        builder.setView(frameLayout);
+        builder.setCustomViewOffset(9);
+        builder.setTitle(LocaleController.getString("EventLogPromotedDeleteMessages", R.string.EventLogPromotedDeleteMessages));
+        builder.setMessage(LocaleController.formatPluralString("DeleteDaysRange", count));
+        builder.setPositiveButton(LocaleController.getString("Delete", R.string.Delete), (dialogInterface, i) -> {
+            if(onDelete != null){
+                onDelete.run(allowRevoke[0]);
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), (dialogInterface, i) -> {
+            dialogInterface.dismiss();
+            if(onCancel != null){
+                onCancel.run();
+            }
+        });
+
+
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(arg0 -> {
+            TextView button = (TextView) (dialog.getButton(AlertDialog.BUTTON_POSITIVE));
+            button.setTextColor(Theme.getColor(Theme.key_dialogTextRed2));
+        });
+
+        dialog.show();
     }
 
     public static void createDeleteMessagesAlert(BaseFragment fragment, TLRPC.User user, TLRPC.Chat chat, TLRPC.EncryptedChat encryptedChat, TLRPC.ChatFull chatInfo, long mergeDialogId, MessageObject selectedMessage, SparseArray<MessageObject>[] selectedMessages, MessageObject.GroupedMessages selectedGroup, boolean scheduled, int loadParticipant, Runnable onDelete, Theme.ResourcesProvider resourcesProvider) {

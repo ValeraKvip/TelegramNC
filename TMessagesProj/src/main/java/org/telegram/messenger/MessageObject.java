@@ -1171,7 +1171,13 @@ public class MessageObject {
                 messageText = replaceWithLink(LocaleController.getString("EventLogAdded", R.string.EventLogAdded), "un2", whoUser);
                 messageText = replaceWithLink(messageText, "un1", fromUser);
             }
-        } else if (event.action instanceof TLRPC.TL_channelAdminLogEventActionParticipantToggleAdmin ||
+        } else if (event.action instanceof TLRPC.TL_channelAdminLogEventActionToggleNoForwards) {
+            boolean new_value = ((TLRPC.TL_channelAdminLogEventActionToggleNoForwards) event.action).new_value;
+            messageText = new_value?LocaleController.formatString("ActionTTLToggleNoForwardsEnebled", R.string.ActionTTLToggleNoForwardsEnebled,fromUser.first_name):
+                    LocaleController.formatString("ActionTTLToggleNoForwardsDisabled", R.string.ActionTTLToggleNoForwardsDisabled,fromUser.first_name);
+        }
+
+        else if (event.action instanceof TLRPC.TL_channelAdminLogEventActionParticipantToggleAdmin ||
                 event.action instanceof TLRPC.TL_channelAdminLogEventActionParticipantToggleBan && ((TLRPC.TL_channelAdminLogEventActionParticipantToggleBan) event.action).prev_participant instanceof TLRPC.TL_channelParticipantAdmin && ((TLRPC.TL_channelAdminLogEventActionParticipantToggleBan) event.action).new_participant instanceof TLRPC.TL_channelParticipant) {
             TLRPC.ChannelParticipant prev_participant;
             TLRPC.ChannelParticipant new_participant;

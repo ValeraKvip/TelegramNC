@@ -25,6 +25,10 @@ public class ForwardingMessagesParams {
     public ArrayList<TLRPC.TL_pollAnswerVoters> pollChoosenAnswers = new ArrayList<>();
 
     public ForwardingMessagesParams(ArrayList<MessageObject> messages, long newDialogId) {
+        this(messages,newDialogId,false);
+    }
+
+    public ForwardingMessagesParams(ArrayList<MessageObject> messages, long newDialogId, boolean isChatPreview ) {
         this.messages = messages;
         hasCaption = false;
         hasSenders = false;
@@ -46,9 +50,13 @@ public class ForwardingMessagesParams {
             message.media = messageObject.messageOwner.media;
             message.action =  messageObject.messageOwner.action;
             message.edit_date = 0;
+            if(isChatPreview) {
+                message.edit_date = messageObject.messageOwner.edit_date;
+                message.date = messageObject.messageOwner.date;
+            }
 
-            message.out = true;
-            message.unread = false;
+            message.out = !isChatPreview || messageObject.messageOwner.out;
+            message.unread = isChatPreview && messageObject.messageOwner.unread;
             message.via_bot_id  =  messageObject.messageOwner.via_bot_id;
             message.reply_markup  =  messageObject.messageOwner.reply_markup;
             message.post = messageObject.messageOwner.post;

@@ -8,6 +8,8 @@
 
 package org.telegram.ui.Components;
 
+import static org.telegram.tgnet.TLRPC.CHAT_FLAG_HAS_PUBLIC_CHANNELS;
+
 import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -122,6 +124,7 @@ import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 import org.telegram.ui.ActionBar.ActionBarPopupWindow;
 import org.telegram.ui.ActionBar.AdjustPanLayoutHelper;
 import org.telegram.ui.ActionBar.AlertDialog;
+import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ChatActivity;
@@ -141,8 +144,14 @@ import java.util.Locale;
 
 public class ChatActivityEnterView extends FrameLayout implements NotificationCenter.NotificationCenterDelegate, SizeNotifierFrameLayout.SizeNotifierFrameLayoutDelegate, StickersAlert.StickersAlertDelegate {
 
+    private final FrameLayout frameLayout;
+    private boolean isChannelSelectorEnabled;
+    private GroupCreateSpan selectChannelSendAs;
+
     public interface ChatActivityEnterViewDelegate {
         void onMessageSend(CharSequence message, boolean notify, int scheduleDate);
+
+        void onChannelSelectorVisible(View v);
 
         void needSendTyping();
 
@@ -1645,6 +1654,155 @@ public class ChatActivityEnterView extends FrameLayout implements NotificationCe
         this(context, parent, fragment, isChat, null);
     }
 
+    public void checkGroupPrivatePublic(Context context, BaseFragment fragment) {
+        if (parentFragment != null) {
+            TLRPC.Chat _chat = parentFragment.getCurrentChat();
+            boolean flag = (info != null) && ((info.flags & CHAT_FLAG_HAS_PUBLIC_CHANNELS) != 0);
+
+            if ((_chat != null && _chat.megagroup && _chat instanceof TLRPC.TL_channel) &&
+                    (flag && ((_chat.username != null && !_chat.username.isEmpty()) || _chat.has_geo || _chat.has_link)) && ((_chat.flags & TLRPC.CHAT_FLAG_IS_PUBLIC) != 0)) {
+
+                isChannelSelectorEnabled = true;
+
+                if (selectChannelSendAs != null && selectChannelSendAs.getParent() == textFieldContainer && textFieldContainer != null) {
+                    textFieldContainer.removeView(selectChannelSendAs);
+                    selectChannelSendAs = null;
+                }
+
+                Object default_chat = null;
+                if (DialogObject.isUserDialog(info.default_send_as.user_id)) {
+                    TLRPC.User user = MessagesController.getInstance(UserConfig.selectedAccount).getUser(info.default_send_as.user_id);
+                    if (user != null) {
+                        default_chat = user;
+                    }
+                } else {
+                    default_chat = MessagesController.getInstance(UserConfig.selectedAccount).getChat(info.default_send_as.chat_id);
+                    if (default_chat == null) {
+                        default_chat = MessagesController.getInstance(UserConfig.selectedAccount).getChat(info.default_send_as.channel_id);
+                    }
+                }
+
+                if (default_chat == null) {
+                    //  have to never happened, but in case of, used to avoid exception.
+                    default_chat = _chat;
+                }
+
+
+                selectChannelSendAs = new GroupCreateSpan(context, default_chat);
+                selectChannelSendAs.clearBadge();
+
+                SenderPickChannelAlert.preload(parentActivity, -_chat.id, accountInstance);
+
+                selectChannelSendAs.setOnClickListener(v -> {
+                    if (selectChannelSendAs.isDeleting()) {
+                        selectChannelSendAs.cancelDeleteAnimation();
+                        SenderPickChannelAlert.hide();
+                    } else {
+                        selectChannelSendAs.startDeleteAnimation();
+
+                        Rect rect = new Rect();
+                        this.getGlobalVisibleRect(rect);
+                        int screenHeight = AndroidUtilities.getRealScreenSize().y;
+
+
+                        int popupMaxHeight = Math.min(rect.top - rect.height() - 60, 1500);
+                        int popupY = screenHeight - rect.top;
+                        int popupX = 0;
+
+                        if (popupMaxHeight < 500) {
+                            // in case of landscape orientation with opened keyboard.
+                            popupY = 0;
+                            popupX = 1;
+                            popupMaxHeight = screenHeight - 100;
+                        }
+
+                        parentFragment.showHidePopup(false);
+                        SenderPickChannelAlert.show(parentActivity, -_chat.id, accountInstance, fragment,
+                                info.default_send_as, popupX, popupY,
+                                popupMaxHeight, (obj, selectedPeer) -> {
+
+                                    if (info != null) {
+                                        info.default_send_as = selectedPeer;
+                                        MessagesController.getInstance(currentAccount).putChatFull(info);
+                                    }
+
+                                    TLRPC.TL_messages_saveDefaultSendAs req = new TLRPC.TL_messages_saveDefaultSendAs();
+                                    req.send_as = accountInstance.getMessagesController().getInputPeer(MessageObject.getPeerId(selectedPeer));
+                                    req.peer = MessagesController.getInputPeer(_chat);
+
+                                    accountInstance.getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+                                        if (error != null) {
+                                            FileLog.e(error.text);
+                                        }
+                                    }));
+
+                                    selectChannelSendAs.reset(obj);
+                                    selectChannelSendAs.clearBadge();
+                                }, () -> {
+                                    parentFragment.showHidePopup(true);
+                                    selectChannelSendAs.cancelDeleteAnimation();
+                                }, selectChannelSendAs);
+                    }
+                });
+
+                selectChannelSendAs.post(() -> AndroidUtilities.runOnUIThread(() -> {
+                    if (delegate != null) {
+                        delegate.onChannelSelectorVisible(selectChannelSendAs);
+                    }
+                }));
+
+                textFieldContainer.addView(selectChannelSendAs, LayoutHelper.createFrame(48, 48, Gravity.BOTTOM | Gravity.LEFT, 10, 10, 0, 8));
+
+
+                if (frameLayout != null) {
+                    textFieldContainer.removeView(frameLayout);
+                    textFieldContainer.addView(frameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT,
+                            LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM, 36, 0, 48, 0));
+                }
+                return;
+
+            } else {
+                if (isChannelSelectorEnabled) {
+                    if (selectChannelSendAs != null) {
+                        if (selectChannelSendAs.getParent() == textFieldContainer && textFieldContainer != null) {
+                            textFieldContainer.removeView(selectChannelSendAs);
+                            selectChannelSendAs = null;
+                            isChannelSelectorEnabled = false;
+                            if (frameLayout != null) {
+                                textFieldContainer.removeView(frameLayout);
+                                textFieldContainer.addView(frameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT,
+                                        LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM, isChannelSelectorEnabled ? 36 : 0, 0, 48, 0));
+                            }
+                            invalidate();
+                        }
+                    }
+                }
+
+            }
+        }
+
+        if (isChannelSelectorEnabled) {
+            if (parentFragment != null) {
+                if (selectChannelSendAs != null) {
+                    if (selectChannelSendAs.getParent() == textFieldContainer && textFieldContainer != null) {
+                        textFieldContainer.removeView(selectChannelSendAs);
+                        selectChannelSendAs = null;
+                        isChannelSelectorEnabled = false;
+                        if (frameLayout != null) {
+                            textFieldContainer.removeView(frameLayout);
+                            textFieldContainer.addView(frameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT,
+                                    LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM, isChannelSelectorEnabled ? 36 : 0, 0, 48, 0));
+                        }
+                        invalidate();
+                    }
+                }
+            }
+            return;
+        }
+
+
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     public ChatActivityEnterView(Activity context, SizeNotifierFrameLayout parent, ChatActivity fragment, final boolean isChat, Theme.ResourcesProvider resourcesProvider) {
         super(context);
@@ -1690,7 +1848,7 @@ public class ChatActivityEnterView extends FrameLayout implements NotificationCe
         textFieldContainer.setPadding(0, AndroidUtilities.dp(1), 0, 0);
         addView(textFieldContainer, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.BOTTOM, 0, 1, 0, 0));
 
-        FrameLayout frameLayout = new FrameLayout(context) {
+        frameLayout = new FrameLayout(context) {
             @Override
             protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
                 super.onLayout(changed, left, top, right, bottom);
@@ -3788,6 +3946,8 @@ public class ChatActivityEnterView extends FrameLayout implements NotificationCe
         if (emojiView != null) {
             emojiView.setChatInfo(info);
         }
+
+        checkGroupPrivatePublic(getContext(), parentFragment);
         setSlowModeTimer(chatInfo.slowmode_next_send_date);
     }
 
@@ -5934,6 +6094,10 @@ public class ChatActivityEnterView extends FrameLayout implements NotificationCe
 
     public View getSendButton() {
         return sendButton.getVisibility() == VISIBLE ? sendButton : audioVideoButtonContainer;
+    }
+
+    public View getSendAsSelector() {
+        return selectChannelSendAs;
     }
 
     public View getAudioVideoButtonContainer() {

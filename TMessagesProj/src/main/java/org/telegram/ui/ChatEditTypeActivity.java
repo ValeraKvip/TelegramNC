@@ -10,6 +10,7 @@ package org.telegram.ui;
 
 import android.content.Context;
 import android.graphics.Rect;
+import android.os.Handler;
 import android.os.Vibrator;
 import android.text.Editable;
 import android.text.InputType;
@@ -21,13 +22,16 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Toast;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ChatObject;
+import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
@@ -43,8 +47,10 @@ import org.telegram.ui.Cells.LoadingCell;
 import org.telegram.ui.Cells.RadioButtonCell;
 import org.telegram.ui.Cells.ShadowSectionCell;
 import org.telegram.ui.Cells.TextCell;
+import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextSettingsCell;
+import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.EditTextBoldCursor;
 import org.telegram.ui.Components.InviteLinkBottomSheet;
 import org.telegram.ui.Components.LayoutHelper;
@@ -82,12 +88,14 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
     private TextSettingsCell textCell2;
 
     private boolean isPrivate;
+    private boolean initailStateIsPrivate;
 
     private TLRPC.Chat currentChat;
     private TLRPC.ChatFull info;
     private long chatId;
     private boolean isChannel;
 
+    private boolean isNoforwards = false;
     private boolean canCreatePublic = true;
     private boolean loadingAdminedChannels;
     private ShadowSectionCell adminedInfoCell;
@@ -108,6 +116,12 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
 
     private final static int done_button = 1;
     private InviteLinkBottomSheet inviteLinkBottomSheet;
+    private LinearLayout restrictContainer;
+    private TextInfoPrivacyCell restrictionInfoHelp;
+    private Handler handler;
+    private AlertDialog progressDialog;
+
+
 
     public ChatEditTypeActivity(long id, boolean forcePublic) {
         chatId = id;
@@ -131,7 +145,9 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
                 }
             }
         }
+        isNoforwards = currentChat.noforwards;
         isPrivate = !isForcePublic && TextUtils.isEmpty(currentChat.username);
+        initailStateIsPrivate = isPrivate;
         isChannel = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
         if (isForcePublic && TextUtils.isEmpty(currentChat.username) || isPrivate && currentChat.creator) {
             TLRPC.TL_channels_checkUsername req = new TLRPC.TL_channels_checkUsername();
@@ -374,6 +390,55 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
         typeInfoCell = new TextInfoPrivacyCell(context);
         linearLayout.addView(typeInfoCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
+        // Saving content restriction block.
+        restrictContainer = new LinearLayout(context);
+        restrictContainer.setOrientation(LinearLayout.VERTICAL);
+        restrictContainer.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+
+
+        HeaderCell headerCellSavingContent = new HeaderCell(context, 23);
+        headerCellSavingContent.setText(LocaleController.getString("SavingContent", R.string.SavingContent));
+        restrictContainer.addView(headerCellSavingContent);
+
+
+        TextCheckCell restrictCell = new TextCheckCell(context);
+        restrictCell.setTextAndCheck(LocaleController.getString("RestrictSavingContent", R.string.RestrictSavingContent),
+                isNoforwards, false);
+
+        restrictCell.setOnClickListener(v -> {
+            isNoforwards = !isNoforwards;
+            restrictCell.setChecked(isNoforwards);
+
+            TLRPC.TL_messages_toggleNoForwards req = new TLRPC.TL_messages_toggleNoForwards();
+
+            req.peer = getMessagesController().getInputPeer(-chatId);
+            req.enabled = isNoforwards;
+
+            getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+                if (error != null) {
+                    if (error.text.equals("CHAT_NOT_MODIFIED")) {
+                        //TODO have to observe chat update instead.
+                        currentChat.noforwards = isNoforwards;
+                        return;
+                    }
+
+                    restrictCell.setChecked(isNoforwards);
+                    FileLog.d("TL_messages_toggleNoForwards req error: " + error.text);
+                }
+
+            }), ConnectionsManager.RequestFlagFailOnServerErrors);
+        });
+
+        restrictContainer.addView(restrictCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        restrictionInfoHelp = new TextInfoPrivacyCell(context);
+        restrictionInfoHelp.setText(LocaleController.getString("RestrictSavingContentHelp", R.string.RestrictSavingContentHelp));
+
+        linearLayout.addView(restrictContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        linearLayout.addView(restrictionInfoHelp, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        //end
+
+
         loadingAdminedCell = new LoadingCell(context);
         linearLayout.addView(loadingAdminedCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
 
@@ -435,6 +500,7 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
 
     private void processDone() {
         if (trySetUsername()) {
+            getMessagesController().loadFullChat(chatId, classGuid, true);
             finishFragment();
         }
     }
@@ -467,8 +533,64 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
                 });
                 return false;
             } else {
-                getMessagesController().updateChannelUserName(chatId, newUserName);
-                currentChat.username = newUserName;
+//                getMessagesController().updateChannelUserName(chatId, newUserName);
+//                currentChat.username = newUserName;
+
+                final int[] reqId = {0};
+                Runnable serverNotRespond = () -> AndroidUtilities.runOnUIThread(() -> {
+                    try {
+                        progressDialog.dismiss();
+                        currentChat.username = oldUserName;
+                        AlertsCreator.createSimpleAlert(typeInfoCell.getContext(), "Error", "The \"type change\" limit was reached, or the connection was lost.\n\nFor Developers:\n Potential server error because the request was not responded. This message is displayed with a 8 second delay if there is no response.").show();
+                        getConnectionsManager().cancelRequest(reqId[0], true);
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    } finally {
+                        isPrivate = !isPrivate;
+                        updatePrivatePublic();
+                    }
+                });
+
+                progressDialog = new AlertDialog(typeInfoCell.getContext(), 3);
+                progressDialog.setOnCancelListener(p -> AndroidUtilities.runOnUIThread(() -> {
+                    try {
+                        handler.removeCallbacks(serverNotRespond);
+                        getConnectionsManager().cancelRequest(reqId[0], true);
+                        isPrivate = !isPrivate;
+                        updatePrivatePublic();
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
+
+                }));
+
+                handler = new Handler();
+                handler.postDelayed(serverNotRespond, 8000);
+                progressDialog.showDelayed(100);
+
+                reqId[0] = getMessagesController().updateChannelUserName(chatId, newUserName, (success) -> AndroidUtilities.runOnUIThread(() -> {
+                    try {
+                        handler.removeCallbacks(serverNotRespond);
+                        progressDialog.dismiss();
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
+                    if (success) {
+                        if (!isPrivate) {
+                            SharedConfig.resetChannelSelectorHintShows();
+                        }
+                        currentChat.username = newUserName;
+                        finishFragment();
+                        getMessagesController().loadFullChat(chatId, classGuid, true);// processDone();
+                    } else if (typeInfoCell != null) {
+                        currentChat.username = oldUserName;
+                        Toast.makeText(typeInfoCell.getContext(), "Reached 'Group change type' limit <-- this came from server!", Toast.LENGTH_LONG).show();
+                        isPrivate = !isPrivate;
+                        updatePrivatePublic();
+                    }
+                }));
+
+                return false;
             }
         }
         return true;
@@ -575,6 +697,19 @@ public class ChatEditTypeActivity extends BaseFragment implements NotificationCe
                 typeInfoCell.setText(isPrivate ? LocaleController.getString("MegaPrivateLinkHelp", R.string.MegaPrivateLinkHelp) : LocaleController.getString("MegaUsernameHelp", R.string.MegaUsernameHelp));
                 headerCell.setText(isPrivate ? LocaleController.getString("ChannelInviteLinkTitle", R.string.ChannelInviteLinkTitle) : LocaleController.getString("ChannelLinkTitle", R.string.ChannelLinkTitle));
             }
+            if (isPrivate) {
+                restrictionInfoHelp.setVisibility(View.VISIBLE);
+                restrictContainer.setVisibility(View.VISIBLE);
+            } else {
+                restrictionInfoHelp.setVisibility(View.GONE);
+                restrictContainer.setVisibility(View.GONE);
+            }
+            if (!initailStateIsPrivate) {
+                restrictionInfoHelp.setVisibility(View.GONE);
+                restrictContainer.setVisibility(View.GONE);
+            }
+
+
             publicContainer.setVisibility(isPrivate ? View.GONE : View.VISIBLE);
             privateContainer.setVisibility(isPrivate ? View.VISIBLE : View.GONE);
             manageLinksTextView.setVisibility(View.VISIBLE);

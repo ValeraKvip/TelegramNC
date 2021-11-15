@@ -50,6 +50,8 @@ public class TLRPC {
     //public static final int CHAT_FLAG_USER_IS_MODERATOR     = 0x00000010;
     //public static final int CHAT_FLAG_IS_BROADCAST          = 0x00000020;
     public static final int CHAT_FLAG_IS_PUBLIC             = 0x00000040;
+    public static final int CHAT_FLAG_HAS_PUBLIC_CHANNELS   = 0x20000000;
+    public static final int CHAT_SEND_AS                    = 0x00004000;
     //public static final int CHAT_FLAG_IS_VERIFIED           = 0x00000080;
 
     //public static final int MESSAGE_FLAG_UNREAD             = 0x00000001;

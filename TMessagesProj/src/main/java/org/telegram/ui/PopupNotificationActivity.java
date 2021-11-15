@@ -328,6 +328,11 @@ public class PopupNotificationActivity extends Activity implements NotificationC
             }
 
             @Override
+            public void onChannelSelectorVisible(View v) {
+
+            }
+
+            @Override
             public void onTextChanged(CharSequence text, boolean big) {
 
             }

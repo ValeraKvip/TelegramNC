@@ -4491,6 +4491,22 @@ public class MessagesController extends BaseController implements NotificationCe
         deleteMessages(messages, randoms, encryptedChat, dialogId, forAll, scheduled, cacheOnly, 0, null);
     }
 
+    public void deleteMessagesInDaysRange(long dialogId, int minDate, int maxDate, boolean revoke, MessagesStorage.BooleanCallback callback) {
+        MessagesStorage.getInstance(currentAccount).getMessagesInRange(dialogId, minDate, maxDate, msgIds -> {
+            if (msgIds == null) {
+                if (callback != null) {
+                    callback.run(true);
+                }
+                return;
+            }
+            MessagesController.getInstance(currentAccount).deleteMessages(msgIds, null, null, dialogId, revoke, false);
+            if (callback != null) {
+                callback.run(true);
+            }
+        });
+
+    }
+
     public void deleteMessages(ArrayList<Integer> messages, ArrayList<Long> randoms, TLRPC.EncryptedChat encryptedChat, long dialogId, boolean forAll, boolean scheduled, boolean cacheOnly, long taskId, TLObject taskRequest) {
         if ((messages == null || messages.isEmpty()) && taskId == 0) {
             return;
@@ -7879,7 +7895,7 @@ public class MessagesController extends BaseController implements NotificationCe
                     allDialogs.add(dialog);
                 }
                 sortDialogs(migrate ? chatsDict : null);
-                
+
                 putAllNeededDraftDialogs();
 
                 if (loadType != DIALOGS_LOAD_TYPE_CHANNEL && loadType != DIALOGS_LOAD_TYPE_UNKNOWN) {
@@ -9129,11 +9145,15 @@ public class MessagesController extends BaseController implements NotificationCe
         }, ConnectionsManager.RequestFlagInvokeAfter);
     }
 
-    public void updateChannelUserName(long chatId, String userName) {
+    public int updateChannelUserName(long chatId, String userName) {
+        return updateChannelUserName(chatId, userName, null);
+    }
+
+    public int updateChannelUserName(long chatId, String userName, MessagesStorage.BooleanCallback callback) {
         TLRPC.TL_channels_updateUsername req = new TLRPC.TL_channels_updateUsername();
         req.channel = getInputChannel(chatId);
         req.username = userName;
-        getConnectionsManager().sendRequest(req, (response, error) -> {
+        int reqId = getConnectionsManager().sendRequest(req, (response, error) -> {
             if (response instanceof TLRPC.TL_boolTrue) {
                 AndroidUtilities.runOnUIThread(() -> {
                     TLRPC.Chat chat = getChat(chatId);
@@ -9149,7 +9169,13 @@ public class MessagesController extends BaseController implements NotificationCe
                     getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, UPDATE_MASK_CHAT);
                 });
             }
+
+            if (callback != null) {
+                callback.run(response instanceof TLRPC.TL_boolTrue);
+            }
         }, ConnectionsManager.RequestFlagInvokeAfter);
+
+        return reqId;
     }
 
     public void sendBotStart(final TLRPC.User user, String botHash) {

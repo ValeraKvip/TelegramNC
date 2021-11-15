@@ -4423,6 +4423,13 @@ public class LaunchActivity extends Activity implements ActionBarLayout.ActionBa
                 proxyErrorDialog = showAlertDialog(builder);
                 return;
             }
+            else if(reason == 7){
+                builder.setMessage(LocaleController.getString("ChatForwardRestricted", R.string.ChatForwardRestricted));
+                builder.setNegativeButton("Dismiss", (dialog, which) -> {
+                    dialog.dismiss();
+                });
+            }
+
             if (!mainFragmentsStack.isEmpty()) {
                 mainFragmentsStack.get(mainFragmentsStack.size() - 1).showDialog(builder.create());
             }

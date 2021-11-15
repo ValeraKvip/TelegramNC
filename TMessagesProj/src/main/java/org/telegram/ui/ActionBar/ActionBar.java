@@ -1156,6 +1156,12 @@ public class ActionBar extends FrameLayout {
         }
     }
 
+    public void collapse(){
+        if (menu != null) {
+            menu.hideAllPopupMenus();
+        }
+    }
+
     protected void onPause() {
         if (menu != null) {
             menu.hideAllPopupMenus();
